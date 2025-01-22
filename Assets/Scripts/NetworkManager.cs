@@ -3,14 +3,14 @@ using UnityEngine;
 
 public class NetworkManager : MonoBehaviourPunCallbacks
 {
-    private void Start()
-    {
-        Debug.Log("Connecting to Photon...");
-        PhotonNetwork.ConnectUsingSettings(); // Connect to Photon server
-    }
+    [Header("UI References")]
+    [SerializeField] private GameObject loginPanel;
+    [SerializeField] private GameObject roomPanel;
 
     public override void OnConnectedToMaster()
     {
+        loginPanel.SetActive(false);
+        roomPanel.SetActive(true);
         Debug.Log("Connected to Photon Master Server!");
         // You can now join or create a room
     }
@@ -40,5 +40,6 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     {
         Debug.Log("Joined room successfully!");
         PhotonNetwork.Instantiate("PlayerPrefab", Vector3.zero, Quaternion.identity);
+        roomPanel.SetActive(false);
     }
 }
