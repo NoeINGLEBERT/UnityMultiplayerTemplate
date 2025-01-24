@@ -1,23 +1,105 @@
 using Photon.Pun;
 using UnityEngine;
+using TMPro;
+using PlayFab;
+using PlayFab.ClientModels;
+using UnityEngine.UI; // For Image component
+using UnityEngine.Networking; // For UnityWebRequest
+using System.Collections; // For IEnumerator
 
 public class NetworkManager : MonoBehaviourPunCallbacks
 {
     [Header("UI References")]
     [SerializeField] private GameObject loginPanel;
+    [SerializeField] private GameObject profilePanel;
     [SerializeField] private GameObject roomPanel;
+
+    [Header("Profile Panel References")]
+    [SerializeField] private TMP_Text usernameText; // Reference to the username text in the profile panel
+    [SerializeField] private TMP_Text mmrText; // Reference to the MMR text in the profile panel
+    [SerializeField] private Image avatarImage; // Reference to the avatar image in the profile panel
+
+    private string playerUsername = "Unknown"; // Default username
+    private int playerMMR = 0; // Default MMR
+    private string avatarUrl = ""; // Default avatar URL
+
+    private void Start()
+    {
+        // Wait for PlayFabAuth to handle login and call Photon connection
+    }
 
     public override void OnConnectedToMaster()
     {
-        loginPanel.SetActive(false);
-        roomPanel.SetActive(true);
         Debug.Log("Connected to Photon Master Server!");
-        // You can now join or create a room
+        loginPanel.SetActive(false);
+        profilePanel.SetActive(true);
+        roomPanel.SetActive(true);
+
+        // Fetch player username, avatar URL, and MMR
+        GetPlayerAccountInfo();
     }
 
-    public override void OnDisconnected(Photon.Realtime.DisconnectCause cause)
+    private void GetPlayerAccountInfo()
     {
-        Debug.Log($"Disconnected from Photon: {cause}");
+        PlayFabClientAPI.GetAccountInfo(new GetAccountInfoRequest(), OnGetAccountInfoSuccess, OnGetAccountInfoFailure);
+    }
+
+    private void OnGetAccountInfoSuccess(GetAccountInfoResult result)
+    {
+        Debug.Log("Successfully retrieved account info from PlayFab.");
+
+        // Get username from the DisplayName
+        if (!string.IsNullOrEmpty(result.AccountInfo.TitleInfo.DisplayName))
+        {
+            playerUsername = result.AccountInfo.TitleInfo.DisplayName;
+        }
+        else
+        {
+            Debug.LogWarning("DisplayName is empty or null. Default username will be used.");
+        }
+
+        // Get avatar URL
+        if (!string.IsNullOrEmpty(result.AccountInfo.TitleInfo.AvatarUrl))
+        {
+            avatarUrl = result.AccountInfo.TitleInfo.AvatarUrl;
+        }
+        else
+        {
+            Debug.LogWarning("Avatar URL is empty or null. Default avatar will be used.");
+        }
+
+        // Fetch MMR from UserData
+        GetPlayerMMR();
+    }
+
+    private void OnGetAccountInfoFailure(PlayFabError error)
+    {
+        Debug.LogError($"Failed to retrieve account info from PlayFab: {error.ErrorMessage}");
+    }
+
+    private void GetPlayerMMR()
+    {
+        var request = new GetUserDataRequest();
+
+        PlayFabClientAPI.GetUserData(request, OnGetUserDataSuccess, OnGetUserDataFailure);
+    }
+
+    private void OnGetUserDataSuccess(GetUserDataResult result)
+    {
+        Debug.Log("Successfully retrieved player data from PlayFab.");
+
+        if (result.Data != null && result.Data.ContainsKey("MMR"))
+        {
+            int.TryParse(result.Data["MMR"].Value, out playerMMR);
+        }
+
+        // Update the profile panel
+        UpdateProfilePanel();
+    }
+
+    private void OnGetUserDataFailure(PlayFabError error)
+    {
+        Debug.LogError($"Failed to retrieve player MMR data from PlayFab: {error.ErrorMessage}");
     }
 
     public void CreateRoom()
@@ -41,5 +123,59 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         Debug.Log("Joined room successfully!");
         PhotonNetwork.Instantiate("PlayerPrefab", Vector3.zero, Quaternion.identity);
         roomPanel.SetActive(false);
+    }
+
+    /// <summary>
+    /// Updates the profile panel with player username, MMR, and avatar image.
+    /// </summary>
+    private void UpdateProfilePanel()
+    {
+        if (usernameText != null)
+        {
+            usernameText.text = $"{playerUsername}";
+        }
+        else
+        {
+            Debug.LogWarning("UsernameText is not assigned in the inspector.");
+        }
+
+        if (mmrText != null)
+        {
+            mmrText.text = $"MMR: {playerMMR}";
+        }
+        else
+        {
+            Debug.LogWarning("MMRText is not assigned in the inspector.");
+        }
+
+        if (avatarImage != null && !string.IsNullOrEmpty(avatarUrl))
+        {
+            StartCoroutine(LoadAvatarImage(avatarUrl));
+        }
+        else
+        {
+            Debug.LogWarning("AvatarImage is not assigned in the inspector or Avatar URL is empty.");
+        }
+    }
+
+    /// <summary>
+    /// Loads an image from a URL and sets it as the sprite for the avatar image.
+    /// </summary>
+    private IEnumerator LoadAvatarImage(string url)
+    {
+        using (UnityWebRequest webRequest = UnityWebRequestTexture.GetTexture(url))
+        {
+            yield return webRequest.SendWebRequest();
+
+            if (webRequest.result == UnityWebRequest.Result.Success)
+            {
+                Texture2D texture = DownloadHandlerTexture.GetContent(webRequest);
+                avatarImage.sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), Vector2.one * 0.5f);
+            }
+            else
+            {
+                Debug.LogError($"Failed to load avatar image from URL: {webRequest.error}");
+            }
+        }
     }
 }

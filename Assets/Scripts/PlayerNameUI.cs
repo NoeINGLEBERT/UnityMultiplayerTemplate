@@ -35,7 +35,7 @@ public class PlayerNameUI : MonoBehaviourPun
         if (localPlayerCamera != null)
         {
             // Rotate the name tag to always face the local camera
-            transform.rotation = Quaternion.LookRotation(transform.position - localPlayerCamera.transform.position);
+            transform.rotation = Quaternion.LookRotation(transform.position - localPlayerCamera.transform.position, localPlayerCamera.transform.up);
         }
     }
 
@@ -65,7 +65,7 @@ public class PlayerNameUI : MonoBehaviourPun
     {
         PlayFabClientAPI.GetAccountInfo(new GetAccountInfoRequest(), result =>
         {
-            string username = result.AccountInfo.Username; // Or retrieve original casing from custom data
+            string username = result.AccountInfo.TitleInfo.DisplayName; // Or retrieve original casing from custom data
             photonView.RPC("UpdatePlayerName", RpcTarget.AllBuffered, username); // Sync username across all clients
         },
         error =>

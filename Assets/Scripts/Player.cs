@@ -60,11 +60,11 @@ public class Player : MonoBehaviour
         // Handle Camera Collision
         if (Physics.Raycast(_cameraAnchor.transform.position, -_cameraAnchor.transform.forward, out _cameraHit, _cameraArmLength, LayerMask.GetMask("Ground")))
         {
-            _cameraAnchor.transform.Find("Camera").transform.localPosition = new Vector3(0, 0, 1f - _cameraHit.distance);
+            _playerCamera.transform.localPosition = new Vector3(0, 0, 1f - _cameraHit.distance);
         }
         else
         {
-            _cameraAnchor.transform.Find("Camera").transform.localPosition = new Vector3(0, 0, -_cameraArmLength);
+            _playerCamera.transform.localPosition = new Vector3(0, 0, -_cameraArmLength);
         }
 
         // Handle Movement Input

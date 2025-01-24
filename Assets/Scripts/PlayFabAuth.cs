@@ -36,7 +36,8 @@ public class PlayFabAuth : MonoBehaviour
         {
             Email = emailInput.text,
             Password = passwordInput.text,
-            Username = usernameInput.text // Optional: set to null if not explicitly using usernames
+            Username = usernameInput.text,
+            DisplayName = usernameInput.text
         };
 
         PlayFabClientAPI.RegisterPlayFabUser(registerRequest, OnRegisterSuccess, OnRegisterFailure);
@@ -59,6 +60,19 @@ public class PlayFabAuth : MonoBehaviour
     {
         feedbackText.text = "Registration successful! You can now log in.";
         Debug.Log("PlayFab Registration Success: " + result.PlayFabId);
+
+        // Set default MMR
+        var updateRequest = new UpdateUserDataRequest
+        {
+            Data = new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "MMR", "1000" } // Default MMR value
+            }
+        };
+
+        PlayFabClientAPI.UpdateUserData(updateRequest,
+            updateResult => Debug.Log("Default MMR set during registration."),
+            error => Debug.LogError("Failed to set default MMR: " + error.GenerateErrorReport()));
 
         Login();
     }
