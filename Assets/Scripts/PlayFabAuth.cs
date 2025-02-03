@@ -12,6 +12,9 @@ public class PlayFabAuth : MonoBehaviour
     [SerializeField] private TMP_InputField passwordInput; // For password input
     [SerializeField] private TMP_Text feedbackText; // For displaying feedback messages
 
+    public static string AvatarUrl { get; private set; } = "";
+
+
     public void Register()
     {
         if (string.IsNullOrEmpty(emailInput.text) || string.IsNullOrEmpty(passwordInput.text))
@@ -131,8 +134,15 @@ public class PlayFabAuth : MonoBehaviour
         feedbackText.text = "Login successful! Connecting to Photon...";
         Debug.Log("PlayFab Login Success: " + result.PlayFabId);
 
-        // Call Photon connection after successful login
-        ConnectToPhoton();
+        // Retrieve avatar URL and set Photon nickname
+        PlayFabClientAPI.GetAccountInfo(new GetAccountInfoRequest(),
+            accountInfo =>
+            {
+                AvatarUrl = accountInfo.AccountInfo.TitleInfo.AvatarUrl ?? "";
+                PhotonNetwork.NickName = accountInfo.AccountInfo.TitleInfo.DisplayName ?? "Unknown";
+                ConnectToPhoton();
+            },
+            error => Debug.LogError($"Failed to get account info: {error.GenerateErrorReport()}"));
     }
 
     private void OnLoginFailure(PlayFabError error)

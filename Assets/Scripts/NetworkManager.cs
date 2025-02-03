@@ -62,6 +62,11 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         if (!string.IsNullOrEmpty(result.AccountInfo.TitleInfo.AvatarUrl))
         {
             avatarUrl = result.AccountInfo.TitleInfo.AvatarUrl;
+
+            ExitGames.Client.Photon.Hashtable playerProperties = new ExitGames.Client.Photon.Hashtable();
+            playerProperties["AvatarUrl"] = avatarUrl;
+
+            PhotonNetwork.LocalPlayer.SetCustomProperties(playerProperties);
         }
         else
         {
@@ -121,8 +126,20 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     public override void OnJoinedRoom()
     {
         Debug.Log("Joined room successfully!");
+
+        // Set player properties
+        ExitGames.Client.Photon.Hashtable playerProperties = new ExitGames.Client.Photon.Hashtable
+    {
+        { "AvatarUrl", PlayFabAuth.AvatarUrl },
+        { "Username", PhotonNetwork.NickName }
+    };
+        PhotonNetwork.LocalPlayer.SetCustomProperties(playerProperties);
+
         PhotonNetwork.Instantiate("PlayerPrefab", Vector3.zero, Quaternion.identity);
+
         roomPanel.SetActive(false);
+
+        gameObject.GetComponent<PlayerListUI>().enabled = true;
     }
 
     /// <summary>
