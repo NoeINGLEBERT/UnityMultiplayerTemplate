@@ -1301,6 +1301,8 @@ MonoBehaviour:
   chatInput: {fileID: 622217394}
   messageContainer: {fileID: 111344213}
   chatMessagePrefab: {fileID: 7495233972318344399, guid: e68669c8cce6fb54f848a1fddcd48f2e, type: 3}
+  joinColor: {r: 0, g: 1, b: 1, a: 1}
+  leaveColor: {r: 1, g: 0, b: 0, a: 1}
   isChatOpen: 0
 --- !u!4 &421766281
 Transform:

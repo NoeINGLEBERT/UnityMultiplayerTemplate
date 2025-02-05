@@ -10,14 +10,19 @@ using ExitGames.Client.Photon;
 public class ChatManager : MonoBehaviour, IChatClientListener
 {
     [Header("UI References")]
-    [SerializeField] private GameObject chatPanel;          // Chat UI Panel
-    [SerializeField] private TMP_InputField chatInput;      // Chat input field
-    [SerializeField] private Transform messageContainer;    // Message container
-    [SerializeField] private GameObject chatMessagePrefab;  // Chat message prefab
+    [SerializeField] private GameObject chatPanel;
+    [SerializeField] private TMP_InputField chatInput;
+    [SerializeField] private Transform messageContainer;
+    [SerializeField] private GameObject chatMessagePrefab;
+
+    [Header("Message Colors")]
+    [SerializeField] private Color joinColor = Color.green; // Color for when someone joins a channel
+    [SerializeField] private Color leaveColor = Color.red; // Color for when someone leaves a channel
 
     private ChatClient chatClient;
-    public bool isChatOpen = false;
     private string userId;
+    private string currentChannel = "Main Lobby";  // Default channel to the lobby
+    public bool isChatOpen = false;
 
     private void Start()
     {
@@ -29,7 +34,7 @@ public class ChatManager : MonoBehaviour, IChatClientListener
 
         userId = PhotonNetwork.NickName;
         chatClient = new ChatClient(this);
-        chatClient.UseBackgroundWorkerForSending = true; // Helps with async communication
+        chatClient.UseBackgroundWorkerForSending = true;
 
         Photon.Chat.AuthenticationValues authValues = new Photon.Chat.AuthenticationValues(userId);
         chatClient.Connect(PhotonNetwork.PhotonServerSettings.AppSettings.AppIdChat, "1.0", authValues);
@@ -40,21 +45,21 @@ public class ChatManager : MonoBehaviour, IChatClientListener
         if (chatClient != null)
         {
             chatClient.Service();
-            Debug.Log("Photon Chat State: " + chatClient.State); // Monitor state changes
+            Debug.Log("Photon Chat State: " + chatClient.State);
         }
         HandleInput();
     }
 
     private void HandleInput()
     {
-        if (Input.GetKeyDown(KeyCode.Return)) // Open chat or send message
+        if (Input.GetKeyDown(KeyCode.Return))
         {
             if (isChatOpen)
             {
                 if (!string.IsNullOrWhiteSpace(chatInput.text))
                 {
                     SendMessageToChat(chatInput.text);
-                    chatInput.text = ""; // Clear input field
+                    chatInput.text = "";
                 }
                 CloseChat();
             }
@@ -63,7 +68,7 @@ public class ChatManager : MonoBehaviour, IChatClientListener
                 OpenChat();
             }
         }
-        else if (Input.GetKeyDown(KeyCode.Escape) && isChatOpen) // Close chat without sending
+        else if (Input.GetKeyDown(KeyCode.Escape) && isChatOpen)
         {
             CloseChat();
         }
@@ -82,41 +87,43 @@ public class ChatManager : MonoBehaviour, IChatClientListener
         isChatOpen = false;
         chatPanel.SetActive(false);
         chatInput.DeactivateInputField();
-        chatInput.text = ""; // Clear input field
+        chatInput.text = "";
     }
 
     private void SendMessageToChat(string message)
     {
         if (chatClient != null && chatClient.CanChat)
         {
-            chatClient.PublishMessage("GlobalChat", message);
+            chatClient.PublishMessage(currentChannel, message);
         }
     }
 
     public void OnConnected()
     {
         Debug.Log("Connected to Photon Chat");
-        chatClient.Subscribe(new string[] { "GlobalChat" }); // Join a global chat channel
+        chatClient.Subscribe(new string[] { currentChannel });
     }
 
     public void OnDisconnected()
     {
         Debug.LogWarning("Disconnected from Photon Chat. Attempting to reconnect...");
-
-        StartCoroutine(TryReconnect()); // Start reconnection attempt
+        StartCoroutine(TryReconnect());
     }
 
     public void OnSubscribed(string[] channels, bool[] results)
     {
         Debug.Log("Subscribed to " + string.Join(", ", channels));
-        AddMessageToUI("<color=green>Connected to Global Chat</color>");
+        AddMessageToUI($"<color=#{ColorUtility.ToHtmlStringRGB(joinColor)}>Joined {currentChannel}</color>");
     }
 
     public void OnGetMessages(string channelName, string[] senders, object[] messages)
     {
-        for (int i = 0; i < senders.Length; i++)
+        if (channelName == currentChannel)
         {
-            AddMessageToUI($"<b>{senders[i]}:</b> {messages[i]}");
+            for (int i = 0; i < senders.Length; i++)
+            {
+                AddMessageToUI($"<b>{senders[i]}:</b> {messages[i]}");
+            }
         }
     }
 
@@ -126,15 +133,14 @@ public class ChatManager : MonoBehaviour, IChatClientListener
         newMessage.GetComponent<TMP_Text>().text = message;
     }
 
-    // New methods required by Photon Chat's interface
     public void OnUserSubscribed(string channel, string user)
     {
-        Debug.Log($"{user} joined {channel}");
+        Debug.Log($"<color=#{ColorUtility.ToHtmlStringRGB(joinColor)}>{user} joined {channel}</color>");
     }
 
     public void OnUserUnsubscribed(string channel, string user)
     {
-        Debug.Log($"{user} left {channel}");
+        Debug.Log($"<color=#{ColorUtility.ToHtmlStringRGB(leaveColor)}>{user} left {channel}</color>");
     }
 
     public void OnChatStateChange(ChatState state) { }
@@ -145,15 +151,42 @@ public class ChatManager : MonoBehaviour, IChatClientListener
 
     private IEnumerator TryReconnect()
     {
-        yield return new WaitForSeconds(5); // Wait before retrying
-
+        yield return new WaitForSeconds(5);
         if (!PhotonNetwork.IsConnected)
         {
             Debug.LogError("Photon is not connected. Cannot reconnect to chat.");
             yield break;
         }
-
         chatClient.Connect(PhotonNetwork.PhotonServerSettings.AppSettings.AppIdChat, "1.0", new Photon.Chat.AuthenticationValues(userId));
         Debug.Log("Reconnecting to Photon Chat...");
+    }
+
+    public void OnJoinedRoom()
+    {
+        Debug.Log("Joined Room: " + PhotonNetwork.CurrentRoom.Name);
+
+        // Switch to the new room-specific channel
+        currentChannel = PhotonNetwork.CurrentRoom.Name;
+
+        // Subscribe to the new room's chat channel
+        chatClient.Subscribe(new string[] { currentChannel });
+
+        // Unsubscribe from the previous lobby chat
+        chatClient.Unsubscribe(new string[] { "Main Lobby" });
+    }
+
+    public void OnLeftRoom()
+    {
+        Debug.Log("Left Room: " + PhotonNetwork.CurrentRoom.Name);
+
+        // Switch back to the main lobby channel
+        currentChannel = "Main Lobby";
+        chatClient.Subscribe(new string[] { currentChannel });
+
+        // Unsubscribe from the room's chat channel
+        chatClient.Unsubscribe(new string[] { "Room_" + PhotonNetwork.CurrentRoom.Name });
+
+        // Notify UI of the channel switch
+        AddMessageToUI($"<color=#{ColorUtility.ToHtmlStringRGB(joinColor)}>Left Room, switched back to Lobby Chat</color>");
     }
 }

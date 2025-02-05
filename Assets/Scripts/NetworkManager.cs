@@ -143,6 +143,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         roomPanel.SetActive(false);
 
         gameObject.GetComponent<PlayerListUI>().enabled = true;
+
+        // Trigger a method in the ChatManager to handle the room-specific chat
+        FindObjectOfType<ChatManager>().OnJoinedRoom();
     }
 
     /// <summary>
