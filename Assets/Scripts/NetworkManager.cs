@@ -19,6 +19,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     [SerializeField] private TMP_Text mmrText; // Reference to the MMR text in the profile panel
     [SerializeField] private Image avatarImage; // Reference to the avatar image in the profile panel
 
+    [SerializeField] private GameObject chatManager;
+
     private string playerUsername = "Unknown"; // Default username
     private int playerMMR = 0; // Default MMR
     private string avatarUrl = ""; // Default avatar URL
@@ -34,6 +36,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         loginPanel.SetActive(false);
         profilePanel.SetActive(true);
         roomPanel.SetActive(true);
+        chatManager.SetActive(true);
 
         // Fetch player username, avatar URL, and MMR
         GetPlayerAccountInfo();
