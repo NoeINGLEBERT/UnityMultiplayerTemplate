@@ -1,11 +1,13 @@
 using Photon.Pun;
+using Photon.Realtime;
 using UnityEngine;
 using TMPro;
 using PlayFab;
 using PlayFab.ClientModels;
-using UnityEngine.UI; // For Image component
-using UnityEngine.Networking; // For UnityWebRequest
-using System.Collections; // For IEnumerator
+using UnityEngine.UI;
+using UnityEngine.Networking;
+using System.Collections;
+using System.Collections.Generic;
 
 public class NetworkManager : MonoBehaviourPunCallbacks
 {
@@ -13,6 +15,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     [SerializeField] private GameObject loginPanel;
     [SerializeField] private GameObject profilePanel;
     [SerializeField] private GameObject roomPanel;
+    [SerializeField] private Transform roomListContent;
+    [SerializeField] private GameObject roomListItemPrefab;
 
     [Header("Profile Panel References")]
     [SerializeField] private TMP_Text usernameText; // Reference to the username text in the profile panel
@@ -112,18 +116,34 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public void CreateRoom()
     {
-        PhotonNetwork.CreateRoom("TestRoom", new Photon.Realtime.RoomOptions { MaxPlayers = 4 });
+        string roomName = "Room_" + Random.Range(1000, 9999);
+        RoomOptions options = new RoomOptions { MaxPlayers = 4 };
+        options.CustomRoomProperties = new ExitGames.Client.Photon.Hashtable { { "GameStarted", false } };
+        options.CustomRoomPropertiesForLobby = new string[] { "GameStarted" };
+        PhotonNetwork.CreateRoom(roomName, options);
     }
 
-    public void JoinRoom()
+    public void JoinRoom(string roomName)
     {
-        PhotonNetwork.JoinRandomRoom();
+        PhotonNetwork.JoinRoom(roomName);
     }
 
-    public override void OnJoinRandomFailed(short returnCode, string message)
+    public override void OnRoomListUpdate(List<RoomInfo> roomList)
     {
-        Debug.Log("No rooms available, creating a new one.");
-        CreateRoom();
+        foreach (Transform child in roomListContent)
+        {
+            Destroy(child.gameObject);
+        }
+
+        foreach (RoomInfo room in roomList)
+        {
+            if (!room.RemovedFromList && room.CustomProperties.ContainsKey("GameStarted") && !(bool)room.CustomProperties["GameStarted"])
+            {
+                GameObject roomItem = Instantiate(roomListItemPrefab, roomListContent);
+                roomItem.GetComponent<TMP_Text>().text = room.Name;
+                roomItem.GetComponent<Button>().onClick.AddListener(() => JoinRoom(room.Name));
+            }
+        }
     }
 
     public override void OnJoinedRoom()
@@ -141,11 +161,18 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         PhotonNetwork.Instantiate("PlayerPrefab", Vector3.zero, Quaternion.identity);
 
         roomPanel.SetActive(false);
+        SaveLastRoom(PhotonNetwork.CurrentRoom.Name);
 
         gameObject.GetComponent<PlayerListUI>().enabled = true;
 
         // Trigger a method in the ChatManager to handle the room-specific chat
-        FindObjectOfType<ChatManager>().OnJoinedRoom();
+        FindFirstObjectByType<ChatManager>().OnJoinedRoom();
+    }
+
+    private void SaveLastRoom(string roomName)
+    {
+        var request = new UpdateUserDataRequest { Data = new Dictionary<string, string> { { "LastRoom", roomName } } };
+        PlayFabClientAPI.UpdateUserData(request, null, null);
     }
 
     /// <summary>
