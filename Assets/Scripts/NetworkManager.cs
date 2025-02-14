@@ -1,5 +1,6 @@
 using Photon.Pun;
 using Photon.Realtime;
+using ExitGames.Client.Photon;
 using UnityEngine;
 using TMPro;
 using PlayFab;
@@ -17,6 +18,8 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     [SerializeField] private GameObject roomPanel;
     [SerializeField] private Transform roomListContent;
     [SerializeField] private GameObject roomListItemPrefab;
+    [SerializeField] private Transform previousRoomsContent;
+    [SerializeField] private GameObject previousRoomItemPrefab;
 
     [Header("Profile Panel References")]
     [SerializeField] private TMP_Text usernameText; // Reference to the username text in the profile panel
@@ -24,10 +27,17 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     [SerializeField] private Image avatarImage; // Reference to the avatar image in the profile panel
 
     [SerializeField] private GameObject chatManager;
+    [SerializeField] private GameObject lobbyManager;
+
+    public List<string> previousRoomsList = new List<string>();
 
     private string playerUsername = "Unknown"; // Default username
     private int playerMMR = 0; // Default MMR
     private string avatarUrl = ""; // Default avatar URL
+
+    private string currentRoomName;
+
+    [SerializeField] private int maxPlayer;
 
     private void Start()
     {
@@ -37,6 +47,9 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     public override void OnConnectedToMaster()
     {
         Debug.Log("Connected to Photon Master Server!");
+
+        PhotonNetwork.JoinLobby();
+        
         loginPanel.SetActive(false);
         profilePanel.SetActive(true);
         roomPanel.SetActive(true);
@@ -44,6 +57,7 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
         // Fetch player username, avatar URL, and MMR
         GetPlayerAccountInfo();
+        GetPreviousRooms();
     }
 
     private void GetPlayerAccountInfo()
@@ -117,9 +131,12 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     public void CreateRoom()
     {
         string roomName = "Room_" + Random.Range(1000, 9999);
-        RoomOptions options = new RoomOptions { MaxPlayers = 4 };
-        options.CustomRoomProperties = new ExitGames.Client.Photon.Hashtable { { "GameStarted", false } };
-        options.CustomRoomPropertiesForLobby = new string[] { "GameStarted" };
+        RoomOptions options = new RoomOptions
+        {
+            MaxPlayers = maxPlayer,
+            CustomRoomProperties = new ExitGames.Client.Photon.Hashtable { { "GameStarted", false } },
+            CustomRoomPropertiesForLobby = new string[] { "GameStarted" }
+        };
         PhotonNetwork.CreateRoom(roomName, options);
     }
 
@@ -130,18 +147,28 @@ public class NetworkManager : MonoBehaviourPunCallbacks
 
     public override void OnRoomListUpdate(List<RoomInfo> roomList)
     {
+        // Clear existing room items
         foreach (Transform child in roomListContent)
         {
             Destroy(child.gameObject);
         }
 
+        // Populate the room list
         foreach (RoomInfo room in roomList)
         {
-            if (!room.RemovedFromList && room.CustomProperties.ContainsKey("GameStarted") && !(bool)room.CustomProperties["GameStarted"])
+            if (!room.RemovedFromList && room.CustomProperties.TryGetValue("GameStarted", out object started))
             {
-                GameObject roomItem = Instantiate(roomListItemPrefab, roomListContent);
-                roomItem.GetComponent<TMP_Text>().text = room.Name;
-                roomItem.GetComponent<Button>().onClick.AddListener(() => JoinRoom(room.Name));
+                bool gameStarted = (bool)started;
+                if (!gameStarted)
+                {
+                    GameObject roomItem = Instantiate(roomListItemPrefab, roomListContent);
+                    roomItem.GetComponentInChildren<TMP_Text>().text = room.Name;
+                    roomItem.GetComponent<Button>().onClick.AddListener(() => JoinRoom(room.Name));
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"Room {room.Name} missing 'GameStarted' property or is removed.");
             }
         }
     }
@@ -158,10 +185,42 @@ public class NetworkManager : MonoBehaviourPunCallbacks
     };
         PhotonNetwork.LocalPlayer.SetCustomProperties(playerProperties);
 
-        PhotonNetwork.Instantiate("PlayerPrefab", Vector3.zero, Quaternion.identity);
+        
+
+        if (PhotonNetwork.CurrentRoom.CustomProperties.TryGetValue("GameStarted", out object gameStartedObj))
+        {
+            bool gameStarted = (bool)gameStartedObj;
+
+            if (gameStarted)
+            {
+                if (PhotonNetwork.IsMasterClient)
+                {
+                    // Set game as started
+                    ExitGames.Client.Photon.Hashtable roomProperties = new ExitGames.Client.Photon.Hashtable { { "GameStarted", true } };
+                    PhotonNetwork.CurrentRoom.SetCustomProperties(roomProperties);
+
+                    // Save game state to PlayFab
+                    if (!previousRoomsList.Contains(PhotonNetwork.CurrentRoom.Name))
+                    {
+                        previousRoomsList.Add(PhotonNetwork.CurrentRoom.Name);
+                        SavePreviousRooms();
+                    }
+                }
+
+                PhotonNetwork.Instantiate("PlayerPrefab", Vector3.zero, Quaternion.identity);
+            }
+            else
+            {
+                lobbyManager.SetActive(true);
+            }
+        }
+        else
+        {
+            Debug.LogWarning("GameStarted property not found. Defaulting to 'RoomLobby' scene...");
+            PhotonNetwork.LoadLevel("RoomLobby");
+        }
 
         roomPanel.SetActive(false);
-        SaveLastRoom(PhotonNetwork.CurrentRoom.Name);
 
         gameObject.GetComponent<PlayerListUI>().enabled = true;
 
@@ -169,10 +228,81 @@ public class NetworkManager : MonoBehaviourPunCallbacks
         FindFirstObjectByType<ChatManager>().OnJoinedRoom();
     }
 
-    private void SaveLastRoom(string roomName)
+    private void GetPreviousRooms()
     {
-        var request = new UpdateUserDataRequest { Data = new Dictionary<string, string> { { "LastRoom", roomName } } };
-        PlayFabClientAPI.UpdateUserData(request, null, null);
+        PlayFabClientAPI.GetUserData(new GetUserDataRequest(), result =>
+        {
+            if (result.Data != null && result.Data.ContainsKey("PreviousRooms"))
+            {
+                previousRoomsList = new List<string>(result.Data["PreviousRooms"].Value.Split(','));
+                UpdatePreviousRoomsUI();
+            }
+        }, error => Debug.LogError("Failed to fetch previous rooms: " + error.ErrorMessage));
+    }
+
+    private void UpdatePreviousRoomsUI()
+    {
+        foreach (Transform child in previousRoomsContent)
+            Destroy(child.gameObject);
+
+        foreach (string roomName in previousRoomsList)
+        {
+            GameObject roomItem = Instantiate(previousRoomItemPrefab, previousRoomsContent);
+            roomItem.GetComponentInChildren<TMP_Text>().text = roomName;
+            roomItem.GetComponent<Button>().onClick.AddListener(() => TryRejoinRoom(roomName));
+        }
+    }
+
+    private void TryRejoinRoom(string roomName)
+    {
+        currentRoomName = roomName;
+        PhotonNetwork.JoinRoom(roomName);
+    }
+
+    public override void OnJoinRoomFailed(short returnCode, string message)
+    {
+        Debug.Log($"Failed to join room: {message}");
+        Debug.Log($"Tried to join room: {currentRoomName}");
+
+        // Check if the failure reason is "Game does not exist"
+        if (message.Contains("Game does not exist"))
+        {
+            Debug.Log("Room doesn't exist, recreating room.");
+            RecreateRoom(currentRoomName); // Pass the room name to recreate it
+        }
+        else
+        {
+            Debug.Log("Join room failed due to a different reason, not recreating.");
+        }
+    }
+
+    public void RecreateRoom(string roomName)
+    {
+        RoomOptions options = new RoomOptions
+        {
+            MaxPlayers = maxPlayer,
+            CustomRoomProperties = new ExitGames.Client.Photon.Hashtable { { "GameStarted", true } },
+            CustomRoomPropertiesForLobby = new string[] { "GameStarted" }
+        };
+        PhotonNetwork.CreateRoom(roomName, options);
+    }
+
+    public void SavePreviousRooms()
+    {
+        PlayFabClientAPI.UpdateUserData(new UpdateUserDataRequest
+        {
+            Data = new Dictionary<string, string> { { "PreviousRooms", string.Join(",", previousRoomsList) } }
+        }, result => Debug.Log("Previous rooms saved."),
+        error => Debug.LogError("Failed to save previous rooms: " + error.ErrorMessage));
+    }
+
+    public void CloseGame(string roomName)
+    {
+        if (previousRoomsList.Contains(roomName))
+        {
+            previousRoomsList.Remove(roomName);
+            SavePreviousRooms();
+        }
     }
 
     /// <summary>
