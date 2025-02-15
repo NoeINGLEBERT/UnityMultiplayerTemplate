@@ -30,6 +30,13 @@ public class LobbyManager : MonoBehaviourPunCallbacks
             UpdatePlayerCount();
             UpdateReadyStatus();
         }
+
+        PhotonNetwork.AddCallbackTarget(this);
+    }
+
+    public override void OnDisable()
+    {
+        PhotonNetwork.RemoveCallbackTarget(this);
     }
 
     private void UpdatePlayerCount()
@@ -53,21 +60,23 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     public void SetReady()
     {
-        // Toggle ready status
         bool isReady = !GetPlayerReadyStatus(PhotonNetwork.LocalPlayer);
-        playerReadyStatus[PhotonNetwork.LocalPlayer.ActorNumber] = isReady;
 
-        // Update properties in Photon
         Hashtable properties = new Hashtable { { "IsReady", isReady } };
+
         PhotonNetwork.LocalPlayer.SetCustomProperties(properties);
+    }
 
-        // Update UI
-        UpdateReadyStatus();
-
-        // Check if the game should start
-        if (AllPlayersReady())
+    public override void OnPlayerPropertiesUpdate(Player targetPlayer, Hashtable changedProps)
+    {
+        foreach (var key in changedProps.Keys)
         {
-            StartGame();
+            Debug.Log($"Changed Property: {key} = {changedProps[key]}");
+        }
+
+        if (changedProps.ContainsKey("IsReady"))
+        {
+            UpdateReadyStatus();
         }
     }
 
@@ -76,15 +85,22 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         int readyCount = 0;
         foreach (var player in PhotonNetwork.CurrentRoom.Players.Values)
         {
-            if (GetPlayerReadyStatus(player))
+            bool isReady = GetPlayerReadyStatus(player);
+            Debug.Log($"Player {player.ActorNumber}: IsReady = {isReady}");
+
+            if (isReady)
                 readyCount++;
         }
 
         readyStatusText.text = $"Ready: {readyCount}/{PhotonNetwork.CurrentRoom.PlayerCount}";
 
-        // Update button text
-        bool isReady = GetPlayerReadyStatus(PhotonNetwork.LocalPlayer);
-        readyButton.GetComponentInChildren<TMP_Text>().text = isReady ? "Ready" : "Unready";
+        bool localIsReady = GetPlayerReadyStatus(PhotonNetwork.LocalPlayer);
+        readyButton.GetComponentInChildren<TMP_Text>().text = localIsReady ? "Unready" : "Ready";
+
+        if (AllPlayersReady())
+        {
+            StartGame();
+        }
     }
 
     private bool GetPlayerReadyStatus(Player player)

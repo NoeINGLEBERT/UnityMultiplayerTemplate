@@ -3172,7 +3172,7 @@ MonoBehaviour:
   chatManager: {fileID: 421766278}
   lobbyManager: {fileID: 1459273836}
   previousRoomsList: []
-  maxPlayer: 1
+  maxPlayer: 2
 --- !u!4 &817197397
 Transform:
   m_ObjectHideFlags: 0
