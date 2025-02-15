@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using Photon.Pun;
 using Photon.Chat;
 using Photon.Realtime;
@@ -52,7 +53,7 @@ public class ChatManager : MonoBehaviour, IChatClientListener
 
     private void HandleInput()
     {
-        if (Input.GetKeyDown(KeyCode.Return))
+        if (Keyboard.current.enterKey.wasPressedThisFrame)
         {
             if (isChatOpen)
             {
@@ -68,7 +69,7 @@ public class ChatManager : MonoBehaviour, IChatClientListener
                 OpenChat();
             }
         }
-        else if (Input.GetKeyDown(KeyCode.Escape) && isChatOpen)
+        else if (Keyboard.current.escapeKey.wasPressedThisFrame && isChatOpen)
         {
             CloseChat();
         }

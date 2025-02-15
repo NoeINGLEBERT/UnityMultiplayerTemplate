@@ -3,6 +3,7 @@ using Photon.Pun;
 using Photon.Realtime;
 using System.Collections.Generic;
 using UnityEngine.UI;
+using UnityEngine.InputSystem;
 using System.Collections;
 using TMPro;
 using UnityEngine.Networking;
@@ -34,9 +35,9 @@ public class PlayerListUI : MonoBehaviourPunCallbacks
     private void Update()
     {
         // Toggle player list visibility with Tab
-        if (Input.GetKeyDown(KeyCode.Tab))
+        if (Keyboard.current.tabKey.wasPressedThisFrame)
             playerListPanel.SetActive(true);
-        if (Input.GetKeyUp(KeyCode.Tab))
+        if (Keyboard.current.tabKey.wasReleasedThisFrame)
             playerListPanel.SetActive(false);
     }
 
